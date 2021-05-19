@@ -17,6 +17,7 @@
 #include <stdlib.h>  // system
 #include <pthread.h> // pthread
 #include <signal.h>  // capture Ctrl+C
+#include <string.h>  // strcmp
 
 /*
     Definitions
@@ -27,6 +28,7 @@
 struct alert
 {
     char *play_string;
+    char name[20];
     unsigned int duration;
     unsigned int current_time;
     char enabled;
@@ -42,17 +44,25 @@ int alert_count = 0;
 /*
     Functions
 */
-struct alert create_alert(int mins)
+int create_alert(char name[], int mins)
 {
     struct alert _alert;
-    _alert.duration = mins;
-    _alert.play_string = "play -v 0.1 ./sounds/ring.mp3";
+    _alert.duration = mins * 60;
+    _alert.current_time = 0;
+    strcpy(_alert.name, name);
+    _alert.play_string = "play --no-show-progress -V0 -v 0.1 ./sounds/ring.mp3";
     _alert.enabled = 'y';
 
     // Increment the counter and then add this alert to our global array
+    if (alert_count + 1 >= n_alerts)
+    {
+        return 0;
+    }
+
     alert_count = alert_count + 1;
 
     alerts[alert_count - 1] = _alert;
+    return 1;
 }
 
 void *display()
@@ -65,6 +75,7 @@ void *display()
             continue;
         }
 
+        system("clear");
         for (int i = 0; i < alert_count; i++)
         {
             // Check if the alert is enabled before printing anything to console
@@ -73,25 +84,13 @@ void *display()
                 continue;
             }
 
-            system("clear");
-
             // Calculate the percentage completion of the current alert
             double percent = (double)alerts[i].current_time / alerts[i].duration * 100;
 
-            printf("Alarm [%i] progress: %f%c\t(Total: %is / %is)\n", i, percent, '%', alerts[i].current_time, alerts[i].duration);
+            printf("[%s] progress: %f%c\t(Total: %is / %is)\n", alerts[i].name, percent, '%', alerts[i].current_time, alerts[i].duration);
         }
 
-        printf("(Enter key --> stop displaying)\n");
-
-        char *c;
-
-        // Stop display thread
-        if (c == "x" || c == "exit")
-        {
-            system("clear");
-            _display = 'n';
-            break;
-        }
+        printf("(Ctrl+C = stop displaying)\n");
 
         sleep(1);
     }
@@ -116,12 +115,23 @@ void *update()
             {
                 // Play alert and set current_time to 0
                 system(alerts[i].play_string);
-                system("clear");
                 alerts[i].current_time = 0;
             }
         }
         sleep(1);
     }
+}
+
+void list_alerts()
+{
+    for (int i = 0; i < alert_count; i++)
+    {
+        printf("\n%i). [%s] - %i mins", i, alerts[i].name, (alerts[i].duration / 60));
+    }
+}
+
+void find_alert(char name[])
+{
 }
 
 void *menu()
@@ -133,11 +143,53 @@ void *menu()
             continue;
         }
 
-        printf("\t\t<| MENU |>\n");
+        printf("\n\t\t<| MENU |>\n");
+        printf("1 / 'add'     | Add alert\n");
+        printf("2 / 'remove'  | Remove alert\n");
+        printf("3 / 'list'    | List alerts\n");
+        printf("4 / 'display' | Display mode\n");
 
-        char choice;
-        scanf("%c", &choice);
-        printf("You chose: %c\n", choice);
+        char choice[10] = {};
+        scanf(" %s", choice);
+        printf("\nYou chose: %s\n", choice);
+
+        if (!strcmp(choice, "add") || !strcmp(choice, "1"))
+        {
+            // Add new alarm
+            const int MAX_NAME = 20;
+            int mins = 0;
+            char name[MAX_NAME];
+
+            // Get the name
+            printf("What's the name of this alert? > ");
+            scanf(" %19[^\n]s", name);
+
+            // Get the mins duration
+            printf("\n[%s] How many minutes between each alert? > ", name);
+            scanf(" %i", &mins);
+
+            printf("\nYour alert has been created!\n");
+
+            if (create_alert(name, mins) == 1)
+            {
+                printf("\nAlert created!\n");
+            }
+            else
+            {
+                printf("\nError creating alert (You have reached the maximum)\n");
+            }
+        }
+        else if (!strcmp(choice, "remove") || !strcmp(choice, "2"))
+        {
+        }
+        else if (!strcmp(choice, "list") || !strcmp(choice, "3"))
+        {
+            list_alerts();
+        }
+        else if (!strcmp(choice, "display") || !strcmp(choice, "4"))
+        {
+            _display = 'y';
+        }
     }
 }
 
@@ -163,7 +215,7 @@ int main()
     signal(SIGINT, handle_sigint);
 
     // Initial alert(s)
-    create_alert(20);
+    create_alert("Default Alert", 20);
 
     pthread_t display_thread_id, update_thread_id, menu_thread_id;
 
